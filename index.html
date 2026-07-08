@@ -743,6 +743,12 @@ async function loadFromAppsScript() {
     document.getElementById("uploadZone").style.display = "flex";
     document.getElementById("btnRefresh").disabled = false;
 
+    // 5. Check URL for ?course=Name deep-link and switch to it if valid
+    const urlCourse = new URLSearchParams(window.location.search).get("course");
+    if (urlCourse && meta.courses.includes(urlCourse)) {
+      switchView(urlCourse);
+    }
+
     // 5. Cache data to localStorage for offline fallback
     try {
       localStorage.setItem("up_cache", JSON.stringify({
