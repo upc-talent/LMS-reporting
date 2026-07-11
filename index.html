@@ -602,6 +602,7 @@ td { padding:10px 14px; font-size:13px; vertical-align:middle; }
   <button class="btn btn-outline" id="btnExcel" onclick="exportExcel()">⬇ Excel</button>
   <button class="btn btn-blue"    onclick="exportPDF()">🖨 PDF</button>
   <button class="btn btn-navy" id="btnImg" onclick="exportImage()">📷 Image</button>
+  <button class="btn btn-outline" id="btnShareLink" onclick="shareLink(true)" title="Copy a link to this course only — recipients land straight on it with switching/upload controls hidden">🔗 Share Link</button>
 </div>
 
 <!-- ── LEGEND ──────────────────────────────────────────────── -->
@@ -683,11 +684,81 @@ let currentView = "overview"; // "overview" | course name
 let hcOverride  = null;       // (legacy — kept for compatibility)
 let hcUploadRows = null;      // rows from manually uploaded headcount file
 let hcMode = "sheet";         // "sheet" | "upload" | "merge"
+let stakeholderLock = false;  // true when opened via a locked single-course share link
+let pendingViewFromUrl = null; // course name requested via ?course= on load
+
+// ── SHARE LINK HELPERS ──────────────────────────────────────
+// Reads ?course=...&lock=1 from the current URL (used on load).
+function readViewFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const course = params.get("course");
+  const lock   = params.get("lock");
+  return { course: course ? decodeURIComponent(course) : null, lock: lock === "1" };
+}
+
+// Rewrites the address bar to reflect the view currently on screen,
+// WITHOUT reloading the page — this is what makes the link in the
+// browser bar always match whatever course/overview is showing.
+function updateUrlForView(view, lock) {
+  const url = new URL(window.location.href);
+  if (view && view !== "overview") {
+    url.searchParams.set("course", view);
+  } else {
+    url.searchParams.delete("course");
+  }
+  if (lock) {
+    url.searchParams.set("lock", "1");
+  } else {
+    url.searchParams.delete("lock");
+  }
+  history.replaceState(null, "", url.toString());
+}
+
+// Builds a one-course link, copies it to the clipboard, and shows a toast.
+// If "lock" is true, the link opens straight into that course with the
+// course-switcher / upload / refresh controls hidden — ideal for stakeholders.
+async function shareLink(lock) {
+  if (!currentView || currentView === "overview") {
+    showStatus("error", "Open a specific course first, then share its link.");
+    return;
+  }
+  const url = new URL(window.location.href.split("?")[0]);
+  url.searchParams.set("course", currentView);
+  if (lock) url.searchParams.set("lock", "1");
+  const link = url.toString();
+
+  try {
+    await navigator.clipboard.writeText(link);
+    showStatus("success", "✓ Link copied for \"" + currentView + "\"" + (lock ? " (locked, stakeholder view)" : "") + ": " + link);
+  } catch (e) {
+    window.prompt("Copy this link:", link);
+  }
+}
+
+// Hides the admin/navigation chrome so a stakeholder opening a locked
+// link only ever sees the single course they were sent.
+function applyStakeholderLock() {
+  stakeholderLock = true;
+  const ids = ["courseTabsWrap", "uploadZone", "btnRefresh"];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  });
+}
 
 // ── INIT
 window.addEventListener("DOMContentLoaded", () => {
+  const fromUrl = readViewFromUrl();
+  pendingViewFromUrl = fromUrl.course;
+  if (fromUrl.lock) applyStakeholderLock();
   initApp();
   hookFilters();
+});
+
+// Support browser Back/Forward after switching courses
+window.addEventListener("popstate", () => {
+  const fromUrl = readViewFromUrl();
+  switchView(fromUrl.course || "overview");
 });
 
 async function initApp() {
@@ -743,11 +814,15 @@ async function loadFromAppsScript() {
     document.getElementById("uploadZone").style.display = "flex";
     document.getElementById("btnRefresh").disabled = false;
 
-    // 5. Check URL for ?course=Name deep-link and switch to it if valid
-    const urlCourse = new URLSearchParams(window.location.search).get("course");
-    if (urlCourse && meta.courses.includes(urlCourse)) {
-      switchView(urlCourse);
+    // 4b. If this page was opened via a shared course link (?course=...),
+    //     jump straight to that course instead of Overview.
+    if (pendingViewFromUrl && meta.courses.includes(pendingViewFromUrl)) {
+      switchView(pendingViewFromUrl);
+    } else {
+      updateUrlForView("overview", stakeholderLock);
     }
+    if (stakeholderLock) applyStakeholderLock();
+    pendingViewFromUrl = null;
 
     // 5. Cache data to localStorage for offline fallback
     try {
@@ -801,6 +876,15 @@ function restoreFromCache() {
     document.getElementById("toolbar").style.display = "flex";
     document.getElementById("legendBar").style.display = "flex";
     document.getElementById("uploadZone").style.display = "flex";
+
+    if (pendingViewFromUrl && metaData.courses.includes(pendingViewFromUrl)) {
+      switchView(pendingViewFromUrl);
+    } else {
+      updateUrlForView("overview", stakeholderLock);
+    }
+    if (stakeholderLock) applyStakeholderLock();
+    pendingViewFromUrl = null;
+
     return { syncTime: c.syncTime, syncDate: c.syncDate, dataLastModified: c.dataLastModified || null, dataLastEditedTab: c.dataLastEditedTab || null };
   } catch(e) { return null; }
 }
@@ -944,6 +1028,7 @@ document.addEventListener("click", e => {
 // ── VIEW SWITCHER
 function switchView(view) {
   currentView = view;
+  updateUrlForView(view, stakeholderLock);
 
   // Update active dropdown item
   document.querySelectorAll(".course-dropdown-item").forEach(t => t.classList.remove("active"));
