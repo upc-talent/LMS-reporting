@@ -351,6 +351,20 @@ tbody tr:nth-child(even) { background:var(--row-alt); }
 tbody tr:hover { background:#e3eef9; }
 td { padding:10px 14px; font-size:13px; vertical-align:middle; }
 .bar-cell { display:flex; align-items:center; gap:10px; min-width:170px; }
+
+/* Days Left column */
+.days-left { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:600; white-space:nowrap; }
+.days-left.ok       { color:var(--muted); }
+.days-left.warning  { color:#E67E22; }
+.days-left.critical { color:#C0392B; font-weight:700; }
+.days-left.overdue  { color:#922B21; font-weight:700; }
+.days-left.done     { color:var(--teal); }
+
+/* Critical row highlight */
+tr.row-critical td:first-child { border-left:3px solid #C0392B; }
+tr.row-critical { background:#FDF2F2 !important; }
+tr.row-overdue td:first-child  { border-left:3px solid #922B21; }
+tr.row-overdue  { background:#FDEDED !important; }
 .bar-track { flex:1; height:10px; background:#dce4ef; border-radius:6px; overflow:hidden; }
 .bar-fill  { height:100%; border-radius:6px; transition:width .3s; }
 .bar-pct   { font-size:12px; font-weight:700; min-width:36px; text-align:right; }
@@ -602,7 +616,6 @@ td { padding:10px 14px; font-size:13px; vertical-align:middle; }
   <button class="btn btn-outline" id="btnExcel" onclick="exportExcel()">⬇ Excel</button>
   <button class="btn btn-blue"    onclick="exportPDF()">🖨 PDF</button>
   <button class="btn btn-navy" id="btnImg" onclick="exportImage()">📷 Image</button>
-  <button class="btn btn-outline" id="btnShareLink" onclick="shareLink(true)" title="Copy a link to this course only — recipients land straight on it with switching/upload controls hidden">🔗 Share Link</button>
 </div>
 
 <!-- ── LEGEND ──────────────────────────────────────────────── -->
@@ -635,6 +648,7 @@ td { padding:10px 14px; font-size:13px; vertical-align:middle; }
         <th data-col="email">Email</th>
         <th data-col="display_name">Display Name</th>
         <th data-col="completion_rate">Completion Rate</th>
+        <th data-col="_days_left">Days Left</th>
       </tr></thead>
       <tbody id="tbody">
         <tr><td colspan="8">
@@ -684,81 +698,11 @@ let currentView = "overview"; // "overview" | course name
 let hcOverride  = null;       // (legacy — kept for compatibility)
 let hcUploadRows = null;      // rows from manually uploaded headcount file
 let hcMode = "sheet";         // "sheet" | "upload" | "merge"
-let stakeholderLock = false;  // true when opened via a locked single-course share link
-let pendingViewFromUrl = null; // course name requested via ?course= on load
-
-// ── SHARE LINK HELPERS ──────────────────────────────────────
-// Reads ?course=...&lock=1 from the current URL (used on load).
-function readViewFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  const course = params.get("course");
-  const lock   = params.get("lock");
-  return { course: course ? decodeURIComponent(course) : null, lock: lock === "1" };
-}
-
-// Rewrites the address bar to reflect the view currently on screen,
-// WITHOUT reloading the page — this is what makes the link in the
-// browser bar always match whatever course/overview is showing.
-function updateUrlForView(view, lock) {
-  const url = new URL(window.location.href);
-  if (view && view !== "overview") {
-    url.searchParams.set("course", view);
-  } else {
-    url.searchParams.delete("course");
-  }
-  if (lock) {
-    url.searchParams.set("lock", "1");
-  } else {
-    url.searchParams.delete("lock");
-  }
-  history.replaceState(null, "", url.toString());
-}
-
-// Builds a one-course link, copies it to the clipboard, and shows a toast.
-// If "lock" is true, the link opens straight into that course with the
-// course-switcher / upload / refresh controls hidden — ideal for stakeholders.
-async function shareLink(lock) {
-  if (!currentView || currentView === "overview") {
-    showStatus("error", "Open a specific course first, then share its link.");
-    return;
-  }
-  const url = new URL(window.location.href.split("?")[0]);
-  url.searchParams.set("course", currentView);
-  if (lock) url.searchParams.set("lock", "1");
-  const link = url.toString();
-
-  try {
-    await navigator.clipboard.writeText(link);
-    showStatus("success", "✓ Link copied for \"" + currentView + "\"" + (lock ? " (locked, stakeholder view)" : "") + ": " + link);
-  } catch (e) {
-    window.prompt("Copy this link:", link);
-  }
-}
-
-// Hides the admin/navigation chrome so a stakeholder opening a locked
-// link only ever sees the single course they were sent.
-function applyStakeholderLock() {
-  stakeholderLock = true;
-  const ids = ["courseTabsWrap", "uploadZone", "btnRefresh"];
-  ids.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = "none";
-  });
-}
 
 // ── INIT
 window.addEventListener("DOMContentLoaded", () => {
-  const fromUrl = readViewFromUrl();
-  pendingViewFromUrl = fromUrl.course;
-  if (fromUrl.lock) applyStakeholderLock();
   initApp();
   hookFilters();
-});
-
-// Support browser Back/Forward after switching courses
-window.addEventListener("popstate", () => {
-  const fromUrl = readViewFromUrl();
-  switchView(fromUrl.course || "overview");
 });
 
 async function initApp() {
@@ -814,16 +758,6 @@ async function loadFromAppsScript() {
     document.getElementById("uploadZone").style.display = "flex";
     document.getElementById("btnRefresh").disabled = false;
 
-    // 4b. If this page was opened via a shared course link (?course=...),
-    //     jump straight to that course instead of Overview.
-    if (pendingViewFromUrl && meta.courses.includes(pendingViewFromUrl)) {
-      switchView(pendingViewFromUrl);
-    } else {
-      updateUrlForView("overview", stakeholderLock);
-    }
-    if (stakeholderLock) applyStakeholderLock();
-    pendingViewFromUrl = null;
-
     // 5. Cache data to localStorage for offline fallback
     try {
       localStorage.setItem("up_cache", JSON.stringify({
@@ -876,15 +810,6 @@ function restoreFromCache() {
     document.getElementById("toolbar").style.display = "flex";
     document.getElementById("legendBar").style.display = "flex";
     document.getElementById("uploadZone").style.display = "flex";
-
-    if (pendingViewFromUrl && metaData.courses.includes(pendingViewFromUrl)) {
-      switchView(pendingViewFromUrl);
-    } else {
-      updateUrlForView("overview", stakeholderLock);
-    }
-    if (stakeholderLock) applyStakeholderLock();
-    pendingViewFromUrl = null;
-
     return { syncTime: c.syncTime, syncDate: c.syncDate, dataLastModified: c.dataLastModified || null, dataLastEditedTab: c.dataLastEditedTab || null };
   } catch(e) { return null; }
 }
@@ -1028,7 +953,6 @@ document.addEventListener("click", e => {
 // ── VIEW SWITCHER
 function switchView(view) {
   currentView = view;
-  updateUrlForView(view, stakeholderLock);
 
   // Update active dropdown item
   document.querySelectorAll(".course-dropdown-item").forEach(t => t.classList.remove("active"));
@@ -1914,6 +1838,35 @@ function updateClearAllVisibility() {
 function barColor(p)  { return p===100?"var(--navy)":p>0?"var(--blue)":"#dce4ef"; }
 function pctColor(p)  { return p===100?"var(--navy)":p>0?"var(--blue)":"#aaa"; }
 
+// ── DAYS LEFT CALCULATION
+// Returns {days: number|null, label: string, cls: string, rowCls: string}
+function calcDaysLeft(d) {
+  // If already completed, no urgency
+  if (d.completion_rate === 100) return { label: "Done", cls: "done", rowCls: "" };
+
+  const raw = (d.training_date || "").trim();
+  if (!raw || raw === "—") return { label: "—", cls: "ok", rowCls: "" };
+
+  // Parse the training date — format is "01-May-2026" from cleanDate
+  const parsed = new Date(raw);
+  if (isNaN(parsed.getTime())) return { label: "—", cls: "ok", rowCls: "" };
+
+  // Strip time — compare date only
+  const today    = new Date();
+  today.setHours(0,0,0,0);
+  const training = new Date(parsed);
+  training.setHours(0,0,0,0);
+
+  const diffMs   = training.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0)  return { days: diffDays, label: "Overdue",        cls: "overdue",  rowCls: "row-overdue"  };
+  if (diffDays === 0) return { days: 0,       label: "Today!",         cls: "critical", rowCls: "row-critical" };
+  if (diffDays <= 3)  return { days: diffDays, label: diffDays + "d left", cls: "critical", rowCls: "row-critical" };
+  if (diffDays <= 7)  return { days: diffDays, label: diffDays + "d left", cls: "warning",  rowCls: "" };
+  return { days: diffDays, label: diffDays + "d left", cls: "ok", rowCls: "" };
+}
+
 function renderTable() {
   const tbody = document.getElementById("tbody");
   updateStats();
@@ -1924,7 +1877,9 @@ function renderTable() {
     return;
   }
 
-  tbody.innerHTML = filtered.map((d, i) => `<tr>
+  tbody.innerHTML = filtered.map((d, i) => {
+    const dl = calcDaysLeft(d);
+    return `<tr class="${dl.rowCls}">
     <td style="color:#6b7c93;font-size:11px;">${i+1}</td>
     <td>${escHtml(d.area_manager||"—")}</td>
     <td><span class="city-badge">${escHtml(d.city||"—")}</span></td>
@@ -1936,7 +1891,9 @@ function renderTable() {
       <div class="bar-track"><div class="bar-fill" style="width:${d.completion_rate}%;background:${barColor(d.completion_rate)}"></div></div>
       <span class="bar-pct" style="color:${pctColor(d.completion_rate)}">${d.completion_rate}%</span>
     </div></td>
-  </tr>`).join("");
+    <td><span class="days-left ${dl.cls}">${dl.label}</span></td>
+  </tr>`;
+  }).join("");
 }
 
 function resetStats() {
