@@ -351,20 +351,6 @@ tbody tr:nth-child(even) { background:var(--row-alt); }
 tbody tr:hover { background:#e3eef9; }
 td { padding:10px 14px; font-size:13px; vertical-align:middle; }
 .bar-cell { display:flex; align-items:center; gap:10px; min-width:170px; }
-
-/* Days Left column */
-.days-left { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:600; white-space:nowrap; }
-.days-left.ok       { color:var(--muted); }
-.days-left.warning  { color:#E67E22; }
-.days-left.critical { color:#C0392B; font-weight:700; }
-.days-left.overdue  { color:#922B21; font-weight:700; }
-.days-left.done     { color:var(--teal); }
-
-/* Critical row highlight */
-tr.row-critical td:first-child { border-left:3px solid #C0392B; }
-tr.row-critical { background:#FDF2F2 !important; }
-tr.row-overdue td:first-child  { border-left:3px solid #922B21; }
-tr.row-overdue  { background:#FDEDED !important; }
 .bar-track { flex:1; height:10px; background:#dce4ef; border-radius:6px; overflow:hidden; }
 .bar-fill  { height:100%; border-radius:6px; transition:width .3s; }
 .bar-pct   { font-size:12px; font-weight:700; min-width:36px; text-align:right; }
@@ -396,6 +382,17 @@ tr.row-overdue  { background:#FDEDED !important; }
 .cdi-name { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .cdi-date { font-size:10px; color:var(--muted); margin-top:1px; }
 .course-dropdown-item.active .cdi-date { color:var(--blue); }
+.bar-cell { display:flex; align-items:center; gap:10px; min-width:170px; }
+.days-left { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:600; white-space:nowrap; }
+.days-left.ok       { color:var(--muted); }
+.days-left.warning  { color:#E67E22; }
+.days-left.critical { color:#C0392B; font-weight:700; }
+.days-left.overdue  { color:#922B21; font-weight:700; }
+.days-left.done     { color:var(--teal); }
+tr.row-critical td:first-child { border-left:3px solid #C0392B; }
+tr.row-critical { background:#FDF2F2 !important; }
+tr.row-overdue td:first-child  { border-left:3px solid #922B21; }
+tr.row-overdue  { background:#FDEDED !important; }
 .course-mini-stats  { display:flex; gap:8px; margin-bottom:14px; }
 .mini-stat { flex:1; text-align:center; background:var(--row-alt); border-radius:8px; padding:8px 6px; }
 .mini-stat .mn  { font-size:18px; font-weight:700; color:var(--navy); }
@@ -766,6 +763,10 @@ async function loadFromAppsScript() {
     document.getElementById("uploadZone").style.display = "flex";
     document.getElementById("btnRefresh").disabled = false;
 
+    // 5. Deep-link: ?course=CourseName opens that course directly
+    const urlCourse = new URLSearchParams(window.location.search).get("course");
+    if (urlCourse && meta.courses.includes(urlCourse)) switchView(urlCourse);
+
     // 5. Cache data to localStorage for offline fallback
     try {
       localStorage.setItem("up_cache", JSON.stringify({
@@ -911,6 +912,22 @@ function fmtRelative(iso) {
     if (diff < 604800) return Math.floor(diff/86400) + "d ago";
     return d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
   } catch(e) { return ""; }
+}
+
+function calcDaysLeft(d) {
+  if (d.completion_rate === 100) return { label: "Done",    cls: "done",     rowCls: "" };
+  const raw = (d.training_date || "").trim();
+  if (!raw || raw === "—") return { label: "—", cls: "ok", rowCls: "" };
+  const parsed = new Date(raw);
+  if (isNaN(parsed.getTime())) return { label: "—", cls: "ok", rowCls: "" };
+  const today    = new Date(); today.setHours(0,0,0,0);
+  const training = new Date(parsed); training.setHours(0,0,0,0);
+  const diffDays = Math.ceil((training.getTime() - today.getTime()) / 86400000);
+  if (diffDays < 0)   return { label: "Overdue",           cls: "overdue",  rowCls: "row-overdue"  };
+  if (diffDays === 0) return { label: "Today!",            cls: "critical", rowCls: "row-critical" };
+  if (diffDays <= 3)  return { label: diffDays + "d left", cls: "critical", rowCls: "row-critical" };
+  if (diffDays <= 7)  return { label: diffDays + "d left", cls: "warning",  rowCls: "" };
+  return { label: diffDays + "d left", cls: "ok", rowCls: "" };
 }
 
 function buildCourseTabs(courses) {
@@ -1861,35 +1878,6 @@ function updateClearAllVisibility() {
 function barColor(p)  { return p===100?"var(--navy)":p>0?"var(--blue)":"#dce4ef"; }
 function pctColor(p)  { return p===100?"var(--navy)":p>0?"var(--blue)":"#aaa"; }
 
-// ── DAYS LEFT CALCULATION
-// Returns {days: number|null, label: string, cls: string, rowCls: string}
-function calcDaysLeft(d) {
-  // If already completed, no urgency
-  if (d.completion_rate === 100) return { label: "Done", cls: "done", rowCls: "" };
-
-  const raw = (d.training_date || "").trim();
-  if (!raw || raw === "—") return { label: "—", cls: "ok", rowCls: "" };
-
-  // Parse the training date — format is "01-May-2026" from cleanDate
-  const parsed = new Date(raw);
-  if (isNaN(parsed.getTime())) return { label: "—", cls: "ok", rowCls: "" };
-
-  // Strip time — compare date only
-  const today    = new Date();
-  today.setHours(0,0,0,0);
-  const training = new Date(parsed);
-  training.setHours(0,0,0,0);
-
-  const diffMs   = training.getTime() - today.getTime();
-  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays < 0)  return { days: diffDays, label: "Overdue",        cls: "overdue",  rowCls: "row-overdue"  };
-  if (diffDays === 0) return { days: 0,       label: "Today!",         cls: "critical", rowCls: "row-critical" };
-  if (diffDays <= 3)  return { days: diffDays, label: diffDays + "d left", cls: "critical", rowCls: "row-critical" };
-  if (diffDays <= 7)  return { days: diffDays, label: diffDays + "d left", cls: "warning",  rowCls: "" };
-  return { days: diffDays, label: diffDays + "d left", cls: "ok", rowCls: "" };
-}
-
 function renderTable() {
   const tbody = document.getElementById("tbody");
   updateStats();
@@ -2367,8 +2355,7 @@ async function exportImage() {
             <td style="padding:8px 12px;">${(() => {
               const dl = calcDaysLeft(d);
               const colors = {ok:'#6b7c93',warning:'#E67E22',critical:'#C0392B',overdue:'#922B21',done:'#00c6a0'};
-              const c = colors[dl.cls] || '#6b7c93';
-              return `<span style="font-size:12px;font-weight:700;color:${c};">${dl.label}</span>`;
+              return `<span style="font-size:12px;font-weight:700;color:${colors[dl.cls]||'#6b7c93'};">${dl.label}</span>`;
             })()}</td>
           </tr>`;
         }).join("")}
