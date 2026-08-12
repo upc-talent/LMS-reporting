@@ -390,6 +390,12 @@ tr.row-overdue  { background:#FDEDED !important; }
 .course-card-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; }
 .course-card-title  { font-size:15px; font-weight:700; color:var(--navy); line-height:1.3; flex:1; }
 .course-card-badge  { background:var(--navy); color:#fff; font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; margin-left:10px; white-space:nowrap; }
+.course-card-updated { font-size:11px; color:var(--muted); margin-top:8px; display:flex; align-items:center; gap:4px; }
+.course-card-updated .upd-dot { width:6px; height:6px; border-radius:50%; background:var(--teal); flex-shrink:0; }
+.cdi-wrap { display:flex; flex-direction:column; flex:1; min-width:0; }
+.cdi-name { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cdi-date { font-size:10px; color:var(--muted); margin-top:1px; }
+.course-dropdown-item.active .cdi-date { color:var(--blue); }
 .course-mini-stats  { display:flex; gap:8px; margin-bottom:14px; }
 .mini-stat { flex:1; text-align:center; background:var(--row-alt); border-radius:8px; padding:8px 6px; }
 .mini-stat .mn  { font-size:18px; font-weight:700; color:var(--navy); }
@@ -687,6 +693,7 @@ const HEADCOUNT_CSV_FALLBACK = "";
 let appsScriptAvailable = false;
 let metaData    = null;       // {spreadsheetName, courses[], headcountSheet}
 let courseConfig = {};        // {courseName: {category, active}} from Config tab
+let courseLastModified = {};  // {courseName: ISO timestamp}
 let hcData      = null;       // headcount rows (array of objects) from Google Sheets
 let hcHeaders   = null;       // headcount column names from Google Sheets
 let courseCache = {};         // {courseName: {learners[], totalModules}}
@@ -727,8 +734,9 @@ async function loadFromAppsScript() {
     // 1. Fetch metadata (sheet name + list of courses)
     const meta = await apsFetch("meta");
     if (meta.error) throw new Error(meta.error);
-    metaData    = meta;
-    courseConfig = meta.courseConfig || {};
+    metaData           = meta;
+    courseConfig        = meta.courseConfig || {};
+    courseLastModified  = meta.courseLastModified || {};
     appsScriptAvailable = true;
 
     const syncTime = new Date().toLocaleTimeString();
@@ -892,6 +900,19 @@ function setSourceStatus(state, label, info) {
 }
 
 // ── COURSE TABS BUILDER
+function fmtRelative(iso) {
+  if (!iso) return "";
+  try {
+    const d = new Date(iso);
+    const diff = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (diff < 60)     return "just now";
+    if (diff < 3600)   return Math.floor(diff/60) + "m ago";
+    if (diff < 86400)  return Math.floor(diff/3600) + "h ago";
+    if (diff < 604800) return Math.floor(diff/86400) + "d ago";
+    return d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+  } catch(e) { return ""; }
+}
+
 function buildCourseTabs(courses) {
   const panel = document.getElementById("courseDdPanel");
   // Remove any old dynamic items and category headers
@@ -928,7 +949,8 @@ function buildCourseTabs(courses) {
       const item = document.createElement("div");
       item.className = "course-dropdown-item";
       item.id = "ddItem-" + sanitizeId(name);
-      item.innerHTML = `<span>📚</span> ${escHtml(name)} <span class="badge" id="ddBadge-${sanitizeId(name)}">…</span>`;
+      const _lm = courseLastModified[name] ? fmtRelative(courseLastModified[name]) : "";
+      item.innerHTML = `<span>📚</span><div class="cdi-wrap"><div class="cdi-name">${escHtml(name)}</div>${_lm ? `<div class="cdi-date">Updated ${_lm}</div>` : ""}</div><span class="badge" id="ddBadge-${sanitizeId(name)}">…</span>`;
       item.onclick = () => switchView(name);
       panel.appendChild(item);
     });
@@ -1090,6 +1112,7 @@ function mergeAndRenderOverview() {
       <div class="course-bar"><div class="course-bar-fill" style="width:${avgRate}%"></div></div>
       <div class="course-bar-label"><span>Completion</span><span>${avgRate}%</span></div>
       <div class="view-course-btn">View Details →</div>
+      ${courseLastModified[name] ? `<div class="course-card-updated"><span class="upd-dot"></span>Updated ${fmtRelative(courseLastModified[name])}</div>` : ""}
     </div>`;
   });
 
@@ -2316,6 +2339,7 @@ async function exportImage() {
           <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;">Email</th>
           <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;">Display Name</th>
           <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;min-width:180px;">Completion Rate</th>
+          <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;">Days Left</th>
         </tr>
       </thead>
       <tbody>
@@ -2340,6 +2364,12 @@ async function exportImage() {
                 <span style="font-size:12px;font-weight:700;color:${tc};min-width:34px;text-align:right;">${d.completion_rate}%</span>
               </div>
             </td>
+            <td style="padding:8px 12px;">${(() => {
+              const dl = calcDaysLeft(d);
+              const colors = {ok:'#6b7c93',warning:'#E67E22',critical:'#C0392B',overdue:'#922B21',done:'#00c6a0'};
+              const c = colors[dl.cls] || '#6b7c93';
+              return `<span style="font-size:12px;font-weight:700;color:${c};">${dl.label}</span>`;
+            })()}</td>
           </tr>`;
         }).join("")}
       </tbody>
