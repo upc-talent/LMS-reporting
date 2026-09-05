@@ -615,6 +615,7 @@ tr.row-overdue  { background:#FDEDED !important; }
   <button class="btn btn-clear" id="btnClearAll" onclick="clearAllFilters()" title="Clear all filters">✕ Clear all</button>
   <div class="spacer"></div>
   <span class="result-count" id="resultCount"></span>
+  <button class="btn btn-outline" id="btnShareLink" onclick="copyShareLink()" title="Copy a link that opens directly to this course only — everything else stays hidden">🔗 Share link</button>
   <button class="btn btn-outline" id="btnRecalculate" onclick="recalculateData()">🔢 Recalculate</button>
   <button class="btn btn-outline" id="btnExcel" onclick="exportExcel()">⬇ Excel</button>
   <button class="btn btn-blue"    onclick="exportPDF()">🖨 PDF</button>
@@ -702,6 +703,8 @@ let currentView = "overview"; // "overview" | course name
 let hcOverride  = null;       // (legacy — kept for compatibility)
 let hcUploadRows = null;      // rows from manually uploaded headcount file
 let hcMode = "sheet";         // "sheet" | "upload" | "merge"
+let shareMode   = false;      // true when this page load is a locked, single-course share link
+let shareCourse = null;       // the course name this page is locked to when shareMode is true
 
 // ── INIT
 window.addEventListener("DOMContentLoaded", () => {
@@ -710,6 +713,11 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 async function initApp() {
+  // Detect a locked share link: ?course=CourseName&share=1
+  const urlParams = new URLSearchParams(window.location.search);
+  shareCourse = urlParams.get("course");
+  shareMode   = urlParams.get("share") === "1" && !!shareCourse;
+
   const isConfigured = APPS_SCRIPT_URL.includes("script.google.com") &&
                        !APPS_SCRIPT_URL.includes("YOUR_DEPLOYMENT_ID");
 
@@ -724,7 +732,7 @@ async function initApp() {
 
 // ── APPS SCRIPT DATA LOADING
 async function loadFromAppsScript() {
-  setSourceStatus("loading", "Connecting to Google Sheets…", "");
+  setSourceStatus("loading", shareMode ? "Loading shared report…" : "Connecting to Google Sheets…", "");
   document.getElementById("btnRefresh").disabled = true;
 
   try {
@@ -735,6 +743,22 @@ async function loadFromAppsScript() {
     courseConfig        = meta.courseConfig || {};
     courseLastModified  = meta.courseLastModified || {};
     appsScriptAvailable = true;
+
+    // ── LOCKED SHARE LINK: fetch only the requested course, hide the rest of the app
+    if (shareMode) {
+      if (!meta.courses.includes(shareCourse)) {
+        showShareError("This link's course (\"" + shareCourse + "\") wasn't found. It may have been renamed, hidden, or removed from the sheet.");
+        document.getElementById("btnRefresh").disabled = false;
+        return;
+      }
+      await Promise.all([
+        loadHeadcount(),
+        loadCourseData(shareCourse)
+      ]);
+      enterShareMode(shareCourse, meta);
+      document.getElementById("btnRefresh").disabled = false;
+      return;
+    }
 
     const syncTime = new Date().toLocaleTimeString();
     const modLabel = meta.dataLastModified
@@ -763,11 +787,12 @@ async function loadFromAppsScript() {
     document.getElementById("uploadZone").style.display = "flex";
     document.getElementById("btnRefresh").disabled = false;
 
-    // 5. Deep-link: ?course=CourseName opens that course directly
+    // 5. Deep-link: ?course=CourseName opens that course directly (unlocked — for internal use;
+    //    use the "🔗 Share link" button, or add &share=1, for a locked link to send to stakeholders)
     const urlCourse = new URLSearchParams(window.location.search).get("course");
     if (urlCourse && meta.courses.includes(urlCourse)) switchView(urlCourse);
 
-    // 5. Cache data to localStorage for offline fallback
+    // 6. Cache data to localStorage for offline fallback
     try {
       localStorage.setItem("up_cache", JSON.stringify({
         meta:        metaData,
@@ -782,6 +807,11 @@ async function loadFromAppsScript() {
     } catch(e) { /* storage full or unavailable */ }
 
   } catch (err) {
+    if (shareMode) {
+      showShareError("Couldn't load this shared report right now (" + err.message + "). Please try again in a moment.");
+      document.getElementById("btnRefresh").disabled = false;
+      return;
+    }
     // ── CONNECTION FAILED — try to restore from cache
     const cached = restoreFromCache();
     if (cached) {
@@ -823,6 +853,44 @@ function restoreFromCache() {
   } catch(e) { return null; }
 }
 
+// ── SHARE MODE: lock the whole page to one course, hide navigation/admin controls
+function enterShareMode(courseName, meta) {
+  document.getElementById("courseTabsWrap").style.display = "none"; // course switcher / Overview
+  document.getElementById("uploadZone").style.display     = "none"; // headcount upload controls
+  const btnRec  = document.getElementById("btnRecalculate");
+  const btnShare = document.getElementById("btnShareLink");
+  if (btnRec)   btnRec.style.display   = "none";
+  if (btnShare) btnShare.style.display = "none";
+
+  // Show a real "last updated" time for this course — falls back to the sheet-wide
+  // timestamp if this specific tab hasn't logged its own edit yet.
+  const stamp        = courseLastModified[courseName] || (meta && meta.dataLastModified);
+  const updatedLabel = stamp ? "Data updated " + fmtRelative(stamp) : "Data update time not yet tracked";
+
+  setSourceStatus("live", "🔒 Shared report", "Shows \"" + courseName + "\" only  ·  " + updatedLabel);
+  switchView(courseName);
+}
+
+// ── SHARE MODE: shown when a locked share link's course can't be loaded
+function showShareError(message) {
+  document.getElementById("courseTabsWrap").style.display = "none";
+  document.getElementById("uploadZone").style.display     = "none";
+  document.getElementById("toolbar").style.display        = "none";
+  document.getElementById("legendBar").style.display      = "none";
+  document.getElementById("viewCourse").style.display     = "none";
+  document.getElementById("viewOverview").style.display   = "block";
+  document.getElementById("reportTitle").textContent      = "Shared Report Unavailable";
+  document.getElementById("reportSubtitle").textContent   = "";
+  resetStats();
+  setSourceStatus("error", "❌ Shared link unavailable", "");
+  document.getElementById("courseGrid").innerHTML = `
+    <div style="grid-column:1/-1;background:var(--white);border-radius:14px;padding:40px 36px;box-shadow:0 2px 12px rgba(0,50,97,.1);text-align:center;">
+      <div style="font-size:36px;margin-bottom:12px;">🔒</div>
+      <h2 style="color:var(--navy);margin-bottom:10px;font-size:18px;">This shared link isn't available</h2>
+      <p style="color:var(--muted);line-height:1.7;max-width:480px;margin:0 auto;">${escHtml(message)}</p>
+    </div>`;
+}
+
 async function loadHeadcount() {
   const data = await apsFetch("headcount");
   if (data.error) { console.warn("Headcount error:", data.error); return; }
@@ -853,6 +921,27 @@ async function refreshAll() {
   document.getElementById("hcSourceToggle").style.display  = "none";
   document.getElementById("uploadHint").style.display      = "";
   await loadFromAppsScript();
+}
+
+// ── SHARE LINK (locked to the currently viewed course only)
+async function copyShareLink() {
+  if (!currentView || currentView === "overview") {
+    showStatus("error", "Open a specific course first, then copy its share link.");
+    return;
+  }
+  const url = new URL(window.location.href);
+  url.search = ""; // start clean so no stray params leak into the shared link
+  url.searchParams.set("course", currentView);
+  url.searchParams.set("share", "1");
+  const link = url.toString();
+
+  try {
+    await navigator.clipboard.writeText(link);
+    showStatus("success", "🔗 Link copied — opens straight to \"" + currentView + "\" only, with no way to switch courses.");
+  } catch (e) {
+    // Clipboard API can be blocked (older browser, non-HTTPS, etc.) — fall back to a manual copy
+    window.prompt("Copy this link to share \"" + currentView + "\" only:", link);
+  }
 }
 
 // ── RECALCULATE DATA (Force recalculation without full refresh)
@@ -991,6 +1080,9 @@ document.addEventListener("click", e => {
 
 // ── VIEW SWITCHER
 function switchView(view) {
+  // In a locked share link, ignore any attempt to leave the shared course
+  if (shareMode && view !== shareCourse) return;
+
   currentView = view;
 
   // Update active dropdown item
@@ -1037,6 +1129,16 @@ function switchView(view) {
     document.getElementById("legendBar").style.display   = "flex";
     document.getElementById("reportTitle").textContent   = view;
     loadCourseView(view);
+  }
+
+  // Keep the address bar in sync with the current view (not while already locked to a
+  // share link) so that copying the browser URL reopens the same course directly.
+  if (!shareMode) {
+    const url = new URL(window.location.href);
+    if (view === "overview") url.searchParams.delete("course");
+    else                     url.searchParams.set("course", view);
+    url.searchParams.delete("share");
+    history.replaceState(null, "", url.toString());
   }
 }
 
