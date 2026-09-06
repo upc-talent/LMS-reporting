@@ -649,6 +649,7 @@ tr.row-overdue  { background:#FDEDED !important; }
         <th data-col="city">City</th>
         <th data-col="supervisor">Supervisor</th>
         <th data-col="training_date">Training Date</th>
+        <th data-col="completion_date">Completion Date</th>
         <th data-col="email">Email</th>
         <th data-col="display_name">Display Name</th>
         <th data-col="completion_rate">Completion Rate</th>
@@ -1399,6 +1400,7 @@ function loadCourseView(courseName) {
       city:            rowVal(row, ks.cityKey, "City"),
       supervisor:      rowVal(row, ks.supKey,  "Supervisor Name", "Supervisor"),
       training_date:   cleanDate(rowVal(row, ks.dateKey, "Date")),
+      completion_date: (learner && learner.completionDate) ? cleanDate(learner.completionDate) : "",
       email:           rawEmail !== "—" ? rawEmail : em,
       display_name:    nameFromHc !== "—" ? nameFromHc : (learner ? (learner.name || rawEmail) : rawEmail),
       completion_rate: rate,
@@ -1419,6 +1421,7 @@ function loadCourseView(courseName) {
         city:            "—",
         supervisor:      "—",
         training_date:   "—",
+        completion_date: learner.completionDate ? cleanDate(learner.completionDate) : "",
         email:           learner.email || em,
         display_name:    learner.name  || learner.email || em,
         completion_rate: learner._rate,
@@ -1998,6 +2001,7 @@ function renderTable() {
     <td><span class="city-badge">${escHtml(d.city||"—")}</span></td>
     <td>${escHtml(d.supervisor||"—")}</td>
     <td style="color:#6b7c93;font-size:12px;">${escHtml(d.training_date||"—")}</td>
+    <td style="font-size:12px;font-weight:${d.completion_date?'600':'400'};color:${d.completion_date?'#00c6a0':'#6b7c93'}">${d.completion_date ? escHtml(d.completion_date) : "—"}</td>
     <td style="font-size:12px;color:#6b7c93;">${escHtml(d.email)}${d._isExtra ? '<span class="extra-badge">EXTRA</span>' : ''}${d._noHc ? '<span class="no-hc-badge">NO HC</span>' : ''}</td>
     <td style="font-weight:500;">${escHtml(d.display_name||"—")}</td>
     <td><div class="bar-cell">
@@ -2217,7 +2221,7 @@ async function exportExcel() {
 </styleSheet>`;
 
     // ── SHEET XML
-    const headers = ["#","Area Manager","City","Supervisor","Training Date","Email","Display Name","Completion %"];
+    const headers = ["#","Area Manager","City","Supervisor","Training Date","Completion Date","Email","Display Name","Completion %"];
     // const colWidths = [5,22,16,24,16,32,28,18].map(w=>`<col min="${headers.indexOf(headers[colWidths?.length||0])+1}" max="${headers.indexOf(headers[colWidths?.length||0])+1}" width="${w}" customWidth="1"/>`);
 
     // // Build col widths properly
@@ -2264,19 +2268,24 @@ async function exportExcel() {
       rowsXml += textCell(cellAddr(2, r), d.city          || "—",  datXf);
       rowsXml += textCell(cellAddr(3, r), d.supervisor    || "—",  datXf);
       // Use forced text format (xf 10/11) for training_date so Excel doesn't auto-parse it as a date
-      rowsXml += textCell(cellAddr(4, r), d.training_date || "—",  isEven ? 10 : 11);
-      rowsXml += textCell(cellAddr(5, r), d.email,                 datXf);
-      rowsXml += textCell(cellAddr(6, r), d.display_name  || "—",  datXf);
-      rowsXml += textCell(cellAddr(7, r), d.completion_rate + "%", rateXf);
+      rowsXml += textCell(cellAddr(4, r), d.training_date   || "—", isEven ? 10 : 11);
+      rowsXml += textCell(cellAddr(5, r), d.completion_date || "—", isEven ? 10 : 11);
+      rowsXml += textCell(cellAddr(6, r), d.email,                  datXf);
+      rowsXml += textCell(cellAddr(7, r), d.display_name   || "—",  datXf);
+      rowsXml += textCell(cellAddr(8, r), d.completion_rate + "%",  rateXf);
       rowsXml += `</row>`;
     });
 
     const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <sheetViews><sheetView tabSelected="1" workbookViewId="0"><selection activeCell="A1"/></sheetView></sheetViews>
+  <sheetViews><sheetView tabSelected="1" workbookViewId="0">
+    <pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>
+    <selection pane="bottomLeft" activeCell="A2" sqref="A2"/>
+  </sheetView></sheetViews>
   <sheetFormatPr defaultRowHeight="15"/>
   <cols>${colsXml}</cols>
   <sheetData>${rowsXml}</sheetData>
+  <autoFilter ref="A1:I1"/>
 </worksheet>`;
 
     // ── ASSEMBLE .xlsx (ZIP)
@@ -2426,6 +2435,7 @@ async function exportImage() {
           <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;">City</th>
           <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;">Supervisor</th>
           <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;">Training Date</th>
+          <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;">Completion Date</th>
           <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;">Email</th>
           <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;">Display Name</th>
           <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;min-width:180px;">Completion Rate</th>
@@ -2444,6 +2454,7 @@ async function exportImage() {
             <td style="padding:8px 12px;"><span style="background:#e6f0fa;color:#003261;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;">${escHtml(d.city||"—")}</span></td>
             <td style="padding:8px 12px;">${escHtml(d.supervisor||"—")}</td>
             <td style="padding:8px 12px;color:#6b7c93;font-size:11px;">${escHtml(d.training_date||"—")}</td>
+            <td style="padding:8px 12px;font-size:11px;font-weight:600;color:${d.completion_date?'#00c6a0':'#6b7c93'}">${d.completion_date||"—"}</td>
             <td style="padding:8px 12px;color:#6b7c93;font-size:11px;">${escHtml(d.email)}${d._isExtra ? ' <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;background:#fff3e0;color:#c75c00;border:1px solid #ffc57a;">EXTRA</span>' : ''}${d._noHc ? ' <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;background:#f3e5f5;color:#6a1b9a;border:1px solid #ce93d8;">NO HC</span>' : ''}</td>
             <td style="padding:8px 12px;font-weight:600;">${escHtml(d.display_name||"—")}</td>
             <td style="padding:8px 12px;">
