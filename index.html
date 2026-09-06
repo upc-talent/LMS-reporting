@@ -2279,13 +2279,11 @@ async function exportExcel() {
     const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <sheetViews><sheetView tabSelected="1" workbookViewId="0">
-    <pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>
-    <selection pane="bottomLeft" activeCell="A2" sqref="A2"/>
+    <selection activeCell="A1" sqref="A1"/>
   </sheetView></sheetViews>
   <sheetFormatPr defaultRowHeight="15"/>
   <cols>${colsXml}</cols>
   <sheetData>${rowsXml}</sheetData>
-  <autoFilter ref="A1:I1"/>
 </worksheet>`;
 
     // ── ASSEMBLE .xlsx (ZIP)
