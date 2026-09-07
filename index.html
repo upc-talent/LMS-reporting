@@ -2291,15 +2291,16 @@ async function exportExcel() {
 
       rowsXml += `<row r="${r}" ht="20" customHeight="1">`;
       rowsXml += textCell(cellAddr(0, r), String(i + 1),           datXf);
-      rowsXml += textCell(cellAddr(1, r), d.area_manager  || "—",  datXf);
-      rowsXml += textCell(cellAddr(2, r), d.city          || "—",  datXf);
-      rowsXml += textCell(cellAddr(3, r), d.supervisor    || "—",  datXf);
+      rowsXml += textCell(cellAddr(1, r), d.district       || "—",  datXf);
+      rowsXml += textCell(cellAddr(2, r), d.area_manager  || "—",  datXf);
+      rowsXml += textCell(cellAddr(3, r), d.city          || "—",  datXf);
+      rowsXml += textCell(cellAddr(4, r), d.supervisor    || "—",  datXf);
       // Use forced text format (xf 10/11) for training_date so Excel doesn't auto-parse it as a date
-      rowsXml += textCell(cellAddr(4, r), d.training_date   || "—", isEven ? 10 : 11);
-      rowsXml += textCell(cellAddr(5, r), d.completion_date || "—", isEven ? 10 : 11);
-      rowsXml += textCell(cellAddr(6, r), d.email,                  datXf);
-      rowsXml += textCell(cellAddr(7, r), d.display_name   || "—",  datXf);
-      rowsXml += textCell(cellAddr(8, r), d.completion_rate + "%",  rateXf);
+      rowsXml += textCell(cellAddr(5, r), d.training_date   || "—", isEven ? 10 : 11);
+      rowsXml += textCell(cellAddr(6, r), d.completion_date || "—", isEven ? 10 : 11);
+      rowsXml += textCell(cellAddr(7, r), d.email,                  datXf);
+      rowsXml += textCell(cellAddr(8, r), d.display_name   || "—",  datXf);
+      rowsXml += textCell(cellAddr(9, r), d.completion_rate + "%",  rateXf);
       rowsXml += `</row>`;
     });
 
