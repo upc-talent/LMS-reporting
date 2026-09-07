@@ -39,6 +39,7 @@ body { font-family:'Inter','Cairo',sans-serif; background:var(--bg); color:var(-
 .stat-chip { text-align:center; background:rgba(255,255,255,.09); border-radius:10px; padding:8px 16px; min-width:80px; }
 .stat-chip .num { color:#fff; font-size:20px; font-weight:700; line-height:1; }
 .stat-chip .lbl { color:var(--blue); font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.7px; margin-top:2px; }
+.stat-chip .pct { color:rgba(255,255,255,.55); font-size:11px; font-weight:500; margin-top:1px; }
 
 /* ── DATA SOURCE BANNER ──────────────────────────────────── */
 .source-banner {
@@ -432,9 +433,9 @@ tr.row-overdue  { background:#FDEDED !important; }
   </div>
   <div class="header-stats" id="headerStats">
     <div class="stat-chip" id="chipTotal" title="Show all"><div class="num" id="sTotal">—</div><div class="lbl">Total</div></div>
-    <div class="stat-chip" id="chipComp"><div class="num" id="sComp">—</div><div class="lbl">Completed</div></div>
-    <div class="stat-chip" id="chipInProg"><div class="num" id="sInProg">—</div><div class="lbl">In Progress</div></div>
-    <div class="stat-chip" id="chipNS"><div class="num" id="sNS">—</div><div class="lbl">Not Started</div></div>
+    <div class="stat-chip" id="chipComp"><div class="num" id="sComp">—</div><div class="pct" id="pComp"></div><div class="lbl">Completed</div></div>
+    <div class="stat-chip" id="chipInProg"><div class="num" id="sInProg">—</div><div class="pct" id="pInProg"></div><div class="lbl">In Progress</div></div>
+    <div class="stat-chip" id="chipNS"><div class="num" id="sNS">—</div><div class="pct" id="pNS"></div><div class="lbl">Not Started</div></div>
   </div>
 </div>
 
@@ -2055,6 +2056,13 @@ function updateStats() {
   document.getElementById("sComp").textContent   = c100;
   document.getElementById("sInProg").textContent = inP;
   document.getElementById("sNS").textContent     = ns;
+  const pct = v => n > 0 ? Math.round(v/n*100) + "%" : "";
+  const pComp   = document.getElementById("pComp");
+  const pInProg = document.getElementById("pInProg");
+  const pNS     = document.getElementById("pNS");
+  if (pComp)   pComp.textContent   = pct(c100);
+  if (pInProg) pInProg.textContent = pct(inP);
+  if (pNS)     pNS.textContent     = pct(ns);
   const cities = [...new Set(filtered.map(d=>d.city))].filter(Boolean).join(" · ");
   document.getElementById("reportSubtitle").textContent =
     currentView + " | " + (cities || "All Regions") + " | " +
@@ -2416,7 +2424,7 @@ async function exportImage() {
   const wrap   = document.createElement("div");
   // CRITICAL: use left:-9999px (NOT top:-99999px and NOT opacity:0)
   // html2canvas needs the element to actually render in the viewport's layout flow
-  wrap.style.cssText = "position:absolute;left:-9999px;top:0;background:#f4f7fb;font-family:Inter,sans-serif;width:1200px;";
+  wrap.style.cssText = "position:absolute;left:-9999px;top:0;background:#f4f7fb;font-family:Inter,sans-serif;width:1600px;";
 
   // Header
   const header = document.createElement("div");
@@ -2456,17 +2464,17 @@ async function exportImage() {
     <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;margin-top:14px;font-size:12px;">
       <thead>
         <tr style="background:#003261;">
-          <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;">#</th>
-          <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;">District</th>
-          <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;">Area Manager</th>
-          <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;">City</th>
-          <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;">Supervisor</th>
-          <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;">Training Date</th>
-          <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;">Completion Date</th>
-          <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;">Email</th>
-          <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;">Display Name</th>
-          <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;min-width:180px;">Completion Rate</th>
-          <th style="color:#fff;padding:10px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;">Days Left</th>
+          <th style="color:#fff;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;">#</th>
+          <th style="color:#fff;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;">District</th>
+          <th style="color:#fff;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;">Area Manager</th>
+          <th style="color:#fff;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;">City</th>
+          <th style="color:#fff;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;">Supervisor</th>
+          <th style="color:#fff;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;">Training Date</th>
+          <th style="color:#fff;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;">Completion Date</th>
+          <th style="color:#fff;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;">Email</th>
+          <th style="color:#fff;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;">Display Name</th>
+          <th style="color:#fff;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;min-width:140px;">Completion Rate</th>
+          <th style="color:#fff;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;">Days Left</th>
         </tr>
       </thead>
       <tbody>
@@ -2476,24 +2484,24 @@ async function exportImage() {
           const bc  = d.completion_rate===100?"#003261":d.completion_rate>0?"#2FB3DF":"#dce4ef";
           const tc  = d.completion_rate===100?"#003261":d.completion_rate>0?"#2FB3DF":"#999";
           return `<tr style="background:${bg};border-bottom:1px solid #dce4ef;">
-            <td style="padding:8px 12px;color:#6b7c93;font-size:11px;">${i+1}</td>
-            <td style="padding:8px 12px;">${escHtml(d.district||"—")}</td>
-            <td style="padding:8px 12px;">${escHtml(d.area_manager||"—")}</td>
-            <td style="padding:8px 12px;"><span style="background:#e6f0fa;color:#003261;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;">${escHtml(d.city||"—")}</span></td>
-            <td style="padding:8px 12px;">${escHtml(d.supervisor||"—")}</td>
-            <td style="padding:8px 12px;color:#6b7c93;font-size:11px;">${escHtml(d.training_date||"—")}</td>
-            <td style="padding:8px 12px;font-size:11px;font-weight:600;color:${d.completion_date?'#00c6a0':'#6b7c93'}">${d.completion_date||"—"}</td>
-            <td style="padding:8px 12px;color:#6b7c93;font-size:11px;">${escHtml(d.email)}${d._isExtra ? ' <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;background:#fff3e0;color:#c75c00;border:1px solid #ffc57a;">EXTRA</span>' : ''}${d._noHc ? ' <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;background:#f3e5f5;color:#6a1b9a;border:1px solid #ce93d8;">NO HC</span>' : ''}</td>
-            <td style="padding:8px 12px;font-weight:600;">${escHtml(d.display_name||"—")}</td>
-            <td style="padding:8px 12px;">
-              <div style="display:flex;align-items:center;gap:8px;">
+            <td style="padding:7px 9px;color:#6b7c93;font-size:11px;">${i+1}</td>
+            <td style="padding:7px 9px;">${escHtml(d.district||"—")}</td>
+            <td style="padding:7px 9px;">${escHtml(d.area_manager||"—")}</td>
+            <td style="padding:7px 9px;"><span style="background:#e6f0fa;color:#003261;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;">${escHtml(d.city||"—")}</span></td>
+            <td style="padding:7px 9px;">${escHtml(d.supervisor||"—")}</td>
+            <td style="padding:7px 9px;color:#6b7c93;font-size:11px;">${escHtml(d.training_date||"—")}</td>
+            <td style="padding:7px 9px;font-size:11px;font-weight:600;color:${d.completion_date?'#00c6a0':'#6b7c93'}">${d.completion_date||"—"}</td>
+            <td style="padding:7px 9px;color:#6b7c93;font-size:11px;">${escHtml(d.email)}${d._isExtra ? ' <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;background:#fff3e0;color:#c75c00;border:1px solid #ffc57a;">EXTRA</span>' : ''}${d._noHc ? ' <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;background:#f3e5f5;color:#6a1b9a;border:1px solid #ce93d8;">NO HC</span>' : ''}</td>
+            <td style="padding:7px 9px;font-weight:600;">${escHtml(d.display_name||"—")}</td>
+            <td style="padding:7px 9px;">
+              <div style="display:flex;align-items:center;gap:6px;">
                 <div style="flex:1;height:10px;background:#dce4ef;border-radius:6px;overflow:hidden;">
                   <div style="width:${d.completion_rate}%;height:100%;background:${bc};border-radius:6px;"></div>
                 </div>
                 <span style="font-size:12px;font-weight:700;color:${tc};min-width:34px;text-align:right;">${d.completion_rate}%</span>
               </div>
             </td>
-            <td style="padding:8px 12px;">${(() => {
+            <td style="padding:7px 9px;">${(() => {
               const dl = calcDaysLeft(d);
               const colors = {ok:'#6b7c93',warning:'#E67E22',critical:'#C0392B',overdue:'#922B21',done:'#00c6a0'};
               return `<span style="font-size:12px;font-weight:700;color:${colors[dl.cls]||'#6b7c93'};">${dl.label}</span>`;
@@ -2515,7 +2523,7 @@ async function exportImage() {
   await new Promise(r => setTimeout(r, 200));
 
   // Use the wrap's actual rendered dimensions
-  const targetWidth  = 1200;
+  const targetWidth  = 1600;
   const targetHeight = wrap.offsetHeight || wrap.scrollHeight;
 
   try {
